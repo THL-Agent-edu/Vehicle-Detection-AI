@@ -68,14 +68,20 @@ Thumbs.db
 # Dataset - không push dataset lên GitHub
 data/*
 !data/.gitkeep
+!data/**/
+!data/**/.gitkeep
 
 # YOLO training results
 runs/*
 !runs/.gitkeep
+!runs/**/
+!runs/**/.gitkeep
 
 # Trained model weights
 models/*
 !models/.gitkeep
+!models/**/
+!models/**/.gitkeep
 
 # Logs
-*.log
+*.log
