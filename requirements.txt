@@ -1,0 +1,13 @@
+# Thư viện core cho YOLOv8 & Deep Learning
+ultralytics
+torch
+torchvision
+
+# Thư viện xử lý hình ảnh & Thị giác máy tính
+opencv-python
+pillow
+matplotlib
+
+# Xử lý tập dữ liệu và cấu hình
+pyyaml
+numpy
