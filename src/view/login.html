@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - Vehicle Detection AI</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="js/theme.js"></script>
+</head>
+<body>
+
+    <button class="theme-toggle" style="position: absolute; top: 1.5rem; right: 1.5rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; transition: 0.2s;">
+        <i class="ph ph-sun"></i>
+    </button>
+
+    <div class="header">
+        <h1>Vehicle-Detection-AI</h1>
+        <p>HỆ THỐNG NHẬN DIỆN PHƯƠNG TIỆN THÔNG MINH</p>
+    </div>
+
+    <div class="auth-card login-card">
+        <h2>Đăng nhập</h2>
+        
+        <form action="#" method="POST">
+            <div class="form-group">
+                <label for="email">Địa chỉ Email</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-envelope"></i>
+                    <input type="email" id="email" name="email" placeholder="admin@trafficmind.ai" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Mật khẩu</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-lock"></i>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required>
+                </div>
+            </div>
+
+            <div class="options">
+                <label>
+                    <input type="checkbox" name="remember">
+                    Ghi nhớ đăng nhập
+                </label>
+                <a href="#">Quên mật khẩu?</a>
+            </div>
+
+            <button type="submit" class="btn-submit">Đăng nhập</button>
+        </form>
+
+        <div class="bottom-link">
+            <a href="register.html">Chưa có tài khoản? Đăng ký tài khoản mới</a>
+        </div>
+    </div>
+
+</body>
+</html>

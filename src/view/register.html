@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng ký - Vehicle Detection AI</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="js/theme.js"></script>
+</head>
+<body>
+
+    <button class="theme-toggle" style="position: absolute; top: 1.5rem; right: 1.5rem; background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; transition: 0.2s;">
+        <i class="ph ph-sun"></i>
+    </button>
+
+    <a href="login.html" class="back-link">
+        <i class="ph ph-arrow-left"></i>
+        Quay lại trang chủ
+    </a>
+
+    <div class="auth-card register-card">
+        <div class="icon-top">
+            <div class="icon-top-inner">
+                <i class="ph ph-hourglass-high"></i>
+            </div>
+        </div>
+
+        <h2>Đăng ký tài khoản</h2>
+        <p class="register-subtitle">Trải nghiệm hệ thống AI giao thông thông minh</p>
+        
+        <form action="#" method="POST">
+            <div class="form-group">
+                <label for="fullname">Họ và tên</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-user"></i>
+                    <input type="text" id="fullname" name="fullname" placeholder="Nhập họ và tên" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-envelope"></i>
+                    <input type="email" id="email" name="email" placeholder="Địa chỉ email công ty" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Mật khẩu</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-lock"></i>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required>
+                    <i class="ph ph-eye-slash toggle-password"></i>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm-password">Xác nhận mật khẩu</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-clock-counter-clockwise"></i>
+                    <input type="password" id="confirm-password" name="confirm-password" placeholder="••••••••" required>
+                </div>
+            </div>
+
+            <div class="options" style="margin-top: 1.5rem;">
+                <label style="align-items: flex-start;">
+                    <input type="checkbox" name="terms" required style="margin-top: 0.2rem;">
+                    <span>Tôi đồng ý với các điều khoản và chính sách bảo mật</span>
+                </label>
+            </div>
+
+            <button type="submit" class="btn-submit">Đăng ký</button>
+        </form>
+
+        <div class="bottom-link">
+            <a href="login.html">Đã có tài khoản? Đăng nhập ngay</a>
+        </div>
+    </div>
+
+    <div class="footer-text">
+        © 2024 TrafficMind AI Systems. All rights reserved.
+    </div>
+
+    <script>
+        const togglePassword = document.querySelector('.toggle-password');
+        const password = document.querySelector('#password');
+
+        if (togglePassword) {
+            togglePassword.addEventListener('click', function (e) {
+                const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+                password.setAttribute('type', type);
+                this.classList.toggle('ph-eye');
+                this.classList.toggle('ph-eye-slash');
+            });
+        }
+    </script>
+</body>
+</html>
