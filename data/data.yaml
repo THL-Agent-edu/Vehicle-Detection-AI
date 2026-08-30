@@ -1,0 +1,12 @@
+train: train/images
+val: valid/images
+
+nc: 6
+names: ['bus', 'car', 'motorbike', 'threewheel', 'truck', 'van']
+
+roboflow:
+  workspace: yolov8ncustom
+  project: detect_traffic
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/yolov8ncustom/detect_traffic/dataset/1
