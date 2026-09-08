@@ -65,23 +65,38 @@ Thumbs.db
 # YOLO / AI PROJECT
 # =========================
 
-# Dataset - không push dataset lên GitHub
-data/*
-!data/.gitkeep
-!data/**/
-!data/**/.gitkeep
+# Dataset training/validation: bỏ khỏi Git (có thể tải local khi chạy train)
+data/train/**
+data/valid/**
+!data/train/.gitkeep
+!data/valid/.gitkeep
+
+# Giữ lại file config và mô tả dataset
+!data/data.yaml
+!data/README.dataset.txt
+!data/README.roboflow.txt
 
 # YOLO training results
-runs/*
+runs/**
 !runs/.gitkeep
-!runs/**/
 !runs/**/.gitkeep
 
 # Trained model weights
-models/*
+models/**
 !models/.gitkeep
-!models/**/
 !models/**/.gitkeep
+*.pt
+*.pth
 
-# Logs
-*.log
+# Generated media output
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+
+# Logs / caches
+*.log
+*.cache
+__pycache__/
+.pytest_cache/

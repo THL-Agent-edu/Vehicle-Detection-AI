@@ -50,14 +50,18 @@ Vehicle-Detection-AI/
 
 ## 🏷️ Các Lớp Phương Tiện Nhận Diện (Classes)
 
-Mô hình được huấn luyện để nhận diện các lớp phương tiện chính (`data/vehicle.yaml`):
+Mô hình được huấn luyện để nhận diện các lớp phương tiện chính trong tập dữ liệu mới (`data/data.yaml`):
 
 | ID | Class Name | Tên tiếng Việt |
 | :-: | :--- | :--- |
-| `0` | **car** | Ô tô |
-| `1` | **motorbike** | Xe máy |
-| `2` | **bus** | Xe buýt |
-| `3` | **truck** | Xe tải |
+| `0` | **bus** | Xe buýt |
+| `1` | **car** | Ô tô |
+| `2` | **motorbike** | Xe máy |
+| `3` | **threewheel** | Xe ba bánh |
+| `4` | **truck** | Xe tải |
+| `5` | **van** | Xe van |
+
+> Lưu ý: Dataset mới có 6 class, không còn 4 class cũ như trong các tài liệu cũ. Dữ liệu thực tế trong `data/train` và `data/valid` đã khớp với cấu hình này.
 
 ---
 
