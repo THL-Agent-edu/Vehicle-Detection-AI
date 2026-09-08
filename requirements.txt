@@ -11,3 +11,9 @@ matplotlib
 # Xử lý tập dữ liệu và cấu hình
 pyyaml
 numpy
+
+# Thư viện UI Front-end (Dash)
+dash
+dash-bootstrap-components
+pandas
+plotly
