@@ -2,10 +2,17 @@ import dash
 from dash import html, dcc, Input, Output, clientside_callback
 import dash_bootstrap_components as dbc
 
+import os
+
+# Đường dẫn tuyệt đối đến thư mục chứa app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Khởi tạo ứng dụng Dash với tính năng Multi-page và giao diện Bootstrap/Phosphor Icons
 app = dash.Dash(
     __name__, 
     use_pages=True, 
+    pages_folder=os.path.join(BASE_DIR, 'pages'),
+    assets_folder=os.path.join(BASE_DIR, 'assets'),
     external_stylesheets=[
         dbc.themes.BOOTSTRAP, 
         "https://unpkg.com/@phosphor-icons/web"

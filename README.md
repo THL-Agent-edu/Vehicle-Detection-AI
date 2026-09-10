@@ -19,6 +19,7 @@ Hệ thống được thiết kế nhằm tự động phát hiện và phân lo
 - **PyTorch**: Nền tảng Học sâu (Deep Learning) hỗ trợ tính toán và xử lý trên GPU/CPU.
 - **OpenCV**: Thư viện xử lý ảnh và luồng video thời gian thực.
 - **YOLO Dataset Standard**: Định dạng dữ liệu chuẩn với file cấu hình `vehicle.yaml` và các nhãn bounding box tương ứng.
+- **Dash & Plotly**: Xây dựng giao diện Web Dashboard quản lý và thống kê.
 
 ---
 
@@ -36,10 +37,10 @@ Vehicle-Detection-AI/
 │
 ├── notebooks/                 # Jupyter Notebooks phục vụ thử nghiệm & phân tích
 │
-├── src/                       # Mã nguồn chính của ứng dụng (mô hình MVC)
+├── src/                       # Mã nguồn chính của ứng dụng
 │   ├── controller/            # Điều khiển luồng ứng dụng (main_ctrl.py)
 │   ├── model/                 # Xử lý huấn luyện & nhận diện (train.py, predict.py)
-│   └── view/                  # Giao diện người dùng (login_ui.py, register_ui.py,...)
+│   └── ui/                    # Giao diện Web Dashboard (Dash)
 │
 ├── test_images/               # Ảnh/Video mẫu dùng để kiểm thử nhận diện
 ├── requirements.txt           # Danh sách các thư viện cần cài đặt
@@ -65,7 +66,7 @@ Mô hình được huấn luyện để nhận diện các lớp phương tiện
 
 ---
 
-## 🚀 Hướng Dẫn Cài Đặt & Sử Dụng
+## 🚀 Hướng Dẫn Cài Đặt (Installation)
 
 ### 1. Chuẩn bị môi trường
 
@@ -86,11 +87,13 @@ source venv/bin/activate
 
 ### 2. Cài đặt các thư viện phụ thuộc
 
+Cài đặt tất cả các gói cần thiết bằng lệnh sau:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-*(Các thư viện chính bao gồm: `ultralytics`, `torch`, `torchvision`, `opencv-python`, `matplotlib`, `pyyaml`,...)*
+*(Các thư viện chính bao gồm: `ultralytics`, `torch`, `torchvision`, `opencv-python`, `matplotlib`, `pyyaml`, `dash`,...)*
 
 ---
 
@@ -114,9 +117,12 @@ python -m src.model.predict
 
 ### 🖥️ Khởi chạy ứng dụng giao diện (App UI)
 
+Chạy lệnh dưới đây để khởi động giao diện Web quản lý trực quan:
+
 ```bash
-python -m src.controller.main_ctrl
+python src/ui/app.py
 ```
+*Sau khi Terminal báo thành công, hãy mở trình duyệt và truy cập: **http://127.0.0.1:8050/** *
 
 ---
 
