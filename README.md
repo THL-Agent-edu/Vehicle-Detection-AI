@@ -1,98 +1,128 @@
-# 🚗 Vehicle Detection AI - Hệ Thống Nhận Diện Phương Tiện Giao Thông
+# 🚗 Vehicle Detection AI - Nhận Diện Phương Tiện Đường Bộ
 
 > **Bài Tập Lớn Trí Tuệ Nhân Tạo - Đề 20 (Nhóm 1)**  
-> Ứng dụng Thị giác máy tính (Computer Vision) và Học sâu (Deep Learning) bằng YOLOv8 để nhận diện các phương tiện giao thông đường bộ. Dự án đi kèm với Web Dashboard trực quan (xây dựng bằng Dash).
+> Chương trình ứng dụng Thị giác máy tính (Computer Vision) và Học sâu (Deep Learning) để nhận diện các phương tiện giao thông đường bộ thời gian thực.
+
+---
+
+## 📌 Giới Thiệu Dự Án
+
+Hệ thống được thiết kế nhằm tự động phát hiện và phân loại các phương tiện giao thông đường bộ (ô tô, xe máy, xe buýt, xe tải,...) từ hình ảnh, video hoặc luồng camera trực tiếp. Dự án áp dụng kiến trúc **YOLOv8** tiên tiến giúp đạt tốc độ xử lý nhanh cùng độ chính xác cao.
+
+---
+
+## 🛠️ Công Nghệ & Thư Viện Sử Dụng
+
+- **Python**: Ngôn ngữ lập trình chính cho toàn bộ dự án.
+- **YOLOv8**: Mô hình phát hiện đối tượng (Object Detection) thế hệ mới từ Ultralytics.
+- **Ultralytics**: Framework cung cấp công cụ huấn luyện, đánh giá và suy luận mô hình YOLO.
+- **PyTorch**: Nền tảng Học sâu (Deep Learning) hỗ trợ tính toán và xử lý trên GPU/CPU.
+- **OpenCV**: Thư viện xử lý ảnh và luồng video thời gian thực.
+- **YOLO Dataset Standard**: Định dạng dữ liệu chuẩn với file cấu hình `vehicle.yaml` và các nhãn bounding box tương ứng.
+- **Dash & Plotly**: Xây dựng giao diện Web Dashboard quản lý và thống kê.
+
+---
+
+## 📁 Cấu Trúc Thư Mục Dự Án
+
+```text
+Vehicle-Detection-AI/
+│
+├── data/                      # Dữ liệu hình ảnh và nhãn gán chuẩn YOLO
+│   ├── images/                # Thư mục ảnh (train / val)
+│   ├── labels/                # Thư mục nhãn gán bounding box
+│   └── vehicle.yaml           # File cấu hình tập dữ liệu (dataset config)
+│
+├── models/                    # Lưu trữ các checkpoint / trọng số mô hình (.pt)
+│
+├── notebooks/                 # Jupyter Notebooks phục vụ thử nghiệm & phân tích
+│
+├── src/                       # Mã nguồn chính của ứng dụng
+│   ├── controller/            # Điều khiển luồng ứng dụng (main_ctrl.py)
+│   ├── model/                 # Xử lý huấn luyện & nhận diện (train.py, predict.py)
+│   └── ui/                    # Giao diện Web Dashboard (Dash)
+│
+├── test_images/               # Ảnh/Video mẫu dùng để kiểm thử nhận diện
+├── requirements.txt           # Danh sách các thư viện cần cài đặt
+└── README.md                  # Tài liệu hướng dẫn dự án
+```
+
+---
+
+## 🏷️ Các Lớp Phương Tiện Nhận Diện (Classes)
+
+Mô hình được huấn luyện để nhận diện các lớp phương tiện chính (`data/vehicle.yaml`):
+
+| ID | Class Name | Tên tiếng Việt |
+| :-: | :--- | :--- |
+| `0` | **car** | Ô tô |
+| `1` | **motorbike** | Xe máy |
+| `2` | **bus** | Xe buýt |
+| `3` | **truck** | Xe tải |
 
 ---
 
 ## 🚀 Hướng Dẫn Cài Đặt (Installation)
 
-### Bước 1: Chuẩn bị môi trường
-Yêu cầu hệ thống phải có **Python 3.8+** (Khuyên dùng Python 3.10 hoặc 3.11).
+### 1. Chuẩn bị môi trường
 
-Đầu tiên, tải mã nguồn về máy:
+Yêu cầu **Python 3.8+** (khuyên dùng Python 3.10 hoặc 3.11).
+
 ```bash
+# Clone repository (nếu chưa thực hiện)
 git clone https://github.com/THL-Agent-edu/Vehicle-Detection-AI.git
 cd Vehicle-Detection-AI
-```
 
-**(Tùy chọn) Khởi tạo môi trường ảo (Virtual Environment):**
-Để tránh xung đột thư viện với các dự án khác trên máy, bạn nên dùng môi trường ảo:
-```bash
+# Khởi tạo môi trường ảo (tùy chọn)
 python -m venv venv
-
-# Kích hoạt trên Windows (dùng PowerShell):
-.\venv\Scripts\Activate.ps1
-
+# Kích hoạt trên Windows:
+venv\Scripts\activate
 # Kích hoạt trên Linux/macOS:
 source venv/bin/activate
 ```
 
-### Bước 2: Cài đặt thư viện (Dependencies)
-Cài đặt toàn bộ các thư viện cần thiết (YOLO, PyTorch, Dash, OpenCV...) bằng lệnh sau:
+### 2. Cài đặt các thư viện phụ thuộc
+
+Cài đặt tất cả các gói cần thiết bằng lệnh sau:
+
 ```bash
 pip install -r requirements.txt
 ```
 
+*(Các thư viện chính bao gồm: `ultralytics`, `torch`, `torchvision`, `opencv-python`, `matplotlib`, `pyyaml`, `dash`,...)*
+
 ---
 
-## ⚙️ Hướng Dẫn Sử Dụng (Usage)
+## 🎯 Huấn Luyện & Chạy Ứng Dụng
 
-### 1. Chuẩn bị Dữ liệu (Dataset)
-Vì tập dữ liệu ảnh rất nặng nên không được lưu trữ sẵn trên GitHub. Trước khi huấn luyện, bạn **bắt buộc** phải tự copy dữ liệu vào thư mục `data`.
-Cấu trúc chuẩn sau khi copy phải như sau:
-```text
-Vehicle-Detection-AI/
-└── data/
-    ├── images/
-    │   ├── train/    # (Chứa ảnh huấn luyện)
-    │   └── val/      # (Chứa ảnh kiểm thử)
-    ├── labels/
-    │   ├── train/    # (Chứa file nhãn .txt huấn luyện)
-    │   └── val/      # (Chứa file nhãn .txt kiểm thử)
-    └── vehicle.yaml
-```
+### 🏋️ Huấn luyện mô hình (Training)
 
-### 2. Huấn luyện Mô hình (Training)
-Sau khi đã có dataset, chạy lệnh sau để bắt đầu cho AI học (quá trình này có thể mất nhiều thời gian tùy thuộc vào cấu hình máy tính/GPU):
+Chạy file script huấn luyện mô hình YOLOv8 trên dataset phương tiện:
+
 ```bash
 python -m src.model.train
 ```
 
-### 3. Kiểm thử Mô hình (Inference/Predict)
-Để kiểm tra độ chính xác của mô hình sau khi huấn luyện xong trên các ảnh test:
+### 🔍 Chạy thử nghiệm nhận diện (Inference)
+
+Chạy dự đoán trên ảnh/video kiểm thử:
+
 ```bash
 python -m src.model.predict
 ```
 
-### 4. Khởi chạy Giao diện Web (Web Dashboard)
-Để mở bảng điều khiển quản lý trực quan (UI Premium) trên trình duyệt, hãy chạy lệnh:
+### 🖥️ Khởi chạy ứng dụng giao diện (App UI)
+
+Chạy lệnh dưới đây để khởi động giao diện Web quản lý trực quan:
+
 ```bash
 python src/ui/app.py
 ```
-Sau đó, hãy mở trình duyệt web và truy cập vào đường dẫn: **`http://127.0.0.1:8050/`**
+*Sau khi Terminal báo thành công, hãy mở trình duyệt và truy cập: **http://127.0.0.1:8050/** *
 
 ---
 
-## 📁 Cấu Trúc Mã Nguồn
+## 📝 Giấy Phép & Tác Giả
 
-| Thư mục/File | Chức năng |
-|---|---|
-| `data/` | Chứa dữ liệu ảnh, nhãn (labels) và file cấu hình `vehicle.yaml`. |
-| `models/` | Nơi lưu trữ trọng số mô hình (`.pt`) sau khi huấn luyện xong. |
-| `src/model/` | Chứa code xử lý logic AI (`train.py`, `predict.py`). |
-| `src/ui/` | Chứa toàn bộ mã nguồn của giao diện Web Dashboard (Dash). |
-| `test_images/` | Chứa các video/ảnh mẫu để chạy thử nghiệm. |
-| `requirements.txt` | Khai báo các thư viện Python cần thiết cho dự án. |
-
----
-
-## 🏷️ Các Lớp Nhận Diện (Classes)
-Dự án được cấu hình để nhận diện 4 loại phương tiện chính:
-- `0`: **car** (Ô tô con)
-- `1`: **motorbike** (Xe máy)
-- `2`: **bus** (Xe buýt)
-- `3`: **truck** (Xe tải)
-
----
-*Phát triển bởi Nhóm 1 - Đề 20.*
+- **Bài Tập Lớn**: Trí Tuệ Nhân Tạo - Đề 20
+- **Thực hiện**: Nhóm 1
