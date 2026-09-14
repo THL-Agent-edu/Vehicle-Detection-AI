@@ -12,6 +12,11 @@ matplotlib
 pyyaml
 numpy
 
+# Web API backend for the frontend
+fastapi
+uvicorn
+python-multipart
+
 # Thư viện UI Front-end (Dash)
 dash
 dash-bootstrap-components
