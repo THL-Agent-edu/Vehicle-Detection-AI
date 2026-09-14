@@ -1,132 +1,168 @@
-# 🚗 Vehicle Detection AI - Nhận Diện Phương Tiện Đường Bộ
+# Vehicle Detection AI
 
-> **Bài Tập Lớn Trí Tuệ Nhân Tạo - Đề 20 (Nhóm 1)**  
-> Chương trình ứng dụng Thị giác máy tính (Computer Vision) và Học sâu (Deep Learning) để nhận diện các phương tiện giao thông đường bộ thời gian thực.
+Hệ thống phát hiện và phân loại phương tiện giao thông bằng YOLOv8, sử dụng backend FastAPI và frontend React + TypeScript + Vite.
 
----
+## 1. Tổng quan
 
-## 📌 Giới Thiệu Dự Án
+Dự án gồm 2 phần chính:
 
-Hệ thống được thiết kế nhằm tự động phát hiện và phân loại các phương tiện giao thông đường bộ (ô tô, xe máy, xe buýt, xe tải,...) từ hình ảnh, video hoặc luồng camera trực tiếp. Dự án áp dụng kiến trúc **YOLOv8** tiên tiến giúp đạt tốc độ xử lý nhanh cùng độ chính xác cao.
+- Backend Python/FastAPI: xử lý upload ảnh/video, gọi YOLOv8, trả về kết quả bounding box.
+- Frontend React + TypeScript: giao diện quản lý dữ liệu và hiển thị kết quả phát hiện trên ảnh/video.
 
----
+## 2. Công nghệ sử dụng
 
-## 🛠️ Công Nghệ & Thư Viện Sử Dụng
+- Python 3.10+
+- FastAPI
+- Uvicorn
+- Ultralytics YOLOv8
+- PyTorch
+- React
+- TypeScript
+- Vite
 
-- **Python**: Ngôn ngữ lập trình chính cho toàn bộ dự án.
-- **YOLOv8**: Mô hình phát hiện đối tượng (Object Detection) thế hệ mới từ Ultralytics.
-- **Ultralytics**: Framework cung cấp công cụ huấn luyện, đánh giá và suy luận mô hình YOLO.
-- **PyTorch**: Nền tảng Học sâu (Deep Learning) hỗ trợ tính toán và xử lý trên GPU/CPU.
-- **OpenCV**: Thư viện xử lý ảnh và luồng video thời gian thực.
-- **YOLO Dataset Standard**: Định dạng dữ liệu chuẩn với file cấu hình `vehicle.yaml` và các nhãn bounding box tương ứng.
-- **Dash & Plotly**: Xây dựng giao diện Web Dashboard quản lý và thống kê.
-
----
-
-## 📁 Cấu Trúc Thư Mục Dự Án
+## 3. Cấu trúc thư mục
 
 ```text
 Vehicle-Detection-AI/
-│
-├── data/                      # Dữ liệu hình ảnh và nhãn gán chuẩn YOLO
-│   ├── images/                # Thư mục ảnh (train / val)
-│   ├── labels/                # Thư mục nhãn gán bounding box
-│   └── vehicle.yaml           # File cấu hình tập dữ liệu (dataset config)
-│
-├── models/                    # Lưu trữ các checkpoint / trọng số mô hình (.pt)
-│
-├── notebooks/                 # Jupyter Notebooks phục vụ thử nghiệm & phân tích
-│
-├── src/                       # Mã nguồn chính của ứng dụng
-│   ├── controller/            # Điều khiển luồng ứng dụng (main_ctrl.py)
-│   ├── model/                 # Xử lý huấn luyện & nhận diện (train.py, predict.py)
-│   └── ui/                    # Giao diện Web Dashboard (Dash)
-│
-├── test_images/               # Ảnh/Video mẫu dùng để kiểm thử nhận diện
-├── requirements.txt           # Danh sách các thư viện cần cài đặt
-└── README.md                  # Tài liệu hướng dẫn dự án
+├── data/
+├── models/
+├── src/
+│   ├── backend/
+│   │   └── app.py
+│   ├── controller/
+│   ├── model/
+│   └── ui/
+├── uploads/
+├── runs/
+├── requirements.txt
+├── README.md
+├── yolov8n.pt
+└── .venv/
 ```
 
----
+## 4. Yêu cầu môi trường
 
-## 🏷️ Các Lớp Phương Tiện Nhận Diện (Classes)
+- Python 3.10+
+- Node.js 18+
+- npm
+- Git
 
-Mô hình được huấn luyện để nhận diện các lớp phương tiện chính trong tập dữ liệu mới (`data/data.yaml`):
+## 5. Cài đặt
 
-| ID | Class Name | Tên tiếng Việt |
-| :-: | :--- | :--- |
-| `0` | **bus** | Xe buýt |
-| `1` | **car** | Ô tô |
-| `2` | **motorbike** | Xe máy |
-| `3` | **threewheel** | Xe ba bánh |
-| `4` | **truck** | Xe tải |
-| `5` | **van** | Xe van |
+### 5.1 Tạo môi trường Python
 
-> Lưu ý: Dataset mới có 6 class, không còn 4 class cũ như trong các tài liệu cũ. Dữ liệu thực tế trong `data/train` và `data/valid` đã khớp với cấu hình này.
+Windows PowerShell:
 
----
+```powershell
+cd E:\Vehicle-Detection-AI
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-## 🚀 Hướng Dẫn Cài Đặt (Installation)
-
-### 1. Chuẩn bị môi trường
-
-Yêu cầu **Python 3.8+** (khuyên dùng Python 3.10 hoặc 3.11).
+Linux/macOS:
 
 ```bash
-# Clone repository (nếu chưa thực hiện)
-git clone https://github.com/THL-Agent-edu/Vehicle-Detection-AI.git
 cd Vehicle-Detection-AI
-
-# Khởi tạo môi trường ảo (tùy chọn)
-python -m venv venv
-# Kích hoạt trên Windows:
-venv\Scripts\activate
-# Kích hoạt trên Linux/macOS:
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-### 2. Cài đặt các thư viện phụ thuộc
-
-Cài đặt tất cả các gói cần thiết bằng lệnh sau:
+### 5.2 Cài đặt Python dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-*(Các thư viện chính bao gồm: `ultralytics`, `torch`, `torchvision`, `opencv-python`, `matplotlib`, `pyyaml`, `dash`,...)*
-
----
-
-## 🎯 Huấn Luyện & Chạy Ứng Dụng
-
-### 🏋️ Huấn luyện mô hình (Training)
-
-Chạy file script huấn luyện mô hình YOLOv8 trên dataset phương tiện:
+### 5.3 Cài đặt frontend dependencies
 
 ```bash
-python -m src.model.train
+cd src/ui
+npm install
 ```
 
-### 🔍 Chạy thử nghiệm nhận diện (Inference)
+## 6. Chạy ứng dụng
 
-Chạy dự đoán trên ảnh/video kiểm thử:
+### 6.1 Chạy backend
+
+Từ thư mục gốc:
+
+```powershell
+cd E:\Vehicle-Detection-AI
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8000
+```
+
+Backend sẽ chạy tại:
+
+- http://127.0.0.1:8000
+- health check: http://127.0.0.1:8000/health
+
+### 6.2 Chạy frontend
+
+Mở terminal mới:
+
+```powershell
+cd E:\Vehicle-Detection-AI\src\ui
+npm run dev -- --host 0.0.0.0 --port 4179
+```
+
+Frontend sẽ chạy tại:
+
+- http://localhost:4179/
+
+## 7. Truy cập giao diện
+
+Mở trình duyệt và vào:
+
+```text
+http://localhost:4179/
+```
+
+Từ đây bạn có thể:
+
+- upload ảnh/video
+- xem dữ liệu trong Data Management
+- chọn file để phát hiện xe
+- chạy YOLOv8 trên hình ảnh/video
+
+## 8. Build production
 
 ```bash
-python -m src.model.predict
+cd src/ui
+npm run build
 ```
 
-### 🖥️ Khởi chạy ứng dụng giao diện (App UI)
+## 9. Gỡ lỗi thường gặp
 
-Chạy lệnh dưới đây để khởi động giao diện Web quản lý trực quan:
+### Port đã được sử dụng
 
-```bash
-python src/ui/app.py
+Nếu port 8000 hoặc 4179 đang bận, hãy đổi port:
+
+```powershell
+python -m uvicorn src.backend.app:app --host 0.0.0.0 --port 8001
+npm run dev -- --host 0.0.0.0 --port 4180
 ```
-*Sau khi Terminal báo thành công, hãy mở trình duyệt và truy cập: **http://127.0.0.1:8050/** *
 
----
+### CORS lỗi kết nối frontend-backend
 
-## 📝 Giấy Phép & Tác Giả
+Đảm bảo backend đang chạy và frontend đang gọi đúng base URL:
 
-- **Bài Tập Lớn**: Trí Tuệ Nhân Tạo - Đề 20
-- **Thực hiện**: Nhóm 1
+```text
+http://127.0.0.1:8000
+```
+
+### Không thấy box phát hiện
+
+- Kiểm tra backend đã chạy
+- Kiểm tra file upload đúng định dạng JPG/PNG/MP4
+- Kiểm tra dữ liệu trả về từ /detect
+
+## 10. Lưu ý
+
+- Dự án đang dùng mô hình YOLOv8 `best.pt` trong thư mục `models/`
+- Upload file thực tế sẽ được lưu trong `uploads/`
+- Kết quả phát hiện sẽ được lưu trong `runs/`
+
+## 11. License
+
+Dự án phục vụ mục đích học tập và nghiên cứu trong khuôn khổ bài tập lớn AI/Computer Vision.
