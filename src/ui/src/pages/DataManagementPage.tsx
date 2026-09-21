@@ -125,7 +125,7 @@ export function DataManagementPage({
           </div>
 
           <p className="upload-subtitle">Upload images or videos for vehicle detection.</p>
-          <p className="upload-meta">Supported: JPG, JPEG, PNG, MP4 · Max size: 50 MB</p>
+          <p className="upload-meta">Supported: JPG, JPEG, PNG, MP4 · Max size: 500 MB</p>
 
           <div
             className="upload-box"

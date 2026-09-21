@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { DetectionResult, DetectionSettings, UploadedFile } from '../services/api'
 import { formatBytes } from '../utils/fileUtils'
@@ -68,12 +68,151 @@ export function VehicleDetectionPage({
         }
       : null
 
-  const sourcePreviewUrl = latestResult?.resultUrl
-    ?? (sourceMode === 'data' && selectedSource ? `http://127.0.0.1:8000/uploads/${selectedSource.id}` : null)
-    ?? (sourceMode === 'upload' && sourceUploadFile ? URL.createObjectURL(sourceUploadFile) : null)
-    ?? null
+  const isVideoSource = selectedSource?.fileType === 'video'
+    || (sourceMode === 'upload' && !!sourceUploadFile && sourceUploadFile.name.toLowerCase().endsWith('.mp4'))
+
+  const sourcePreviewUrl = isVideoSource
+    ? (sourceMode === 'data' && selectedSource ? `http://127.0.0.1:8000/uploads/${selectedSource.id}` : null)
+      ?? (sourceMode === 'upload' && sourceUploadFile ? URL.createObjectURL(sourceUploadFile) : null)
+    : latestResult?.resultUrl
+      ?? (sourceMode === 'data' && selectedSource ? `http://127.0.0.1:8000/uploads/${selectedSource.id}` : null)
+      ?? (sourceMode === 'upload' && sourceUploadFile ? URL.createObjectURL(sourceUploadFile) : null)
+      ?? null
 
   const [previewAspectRatio, setPreviewAspectRatio] = useState<number | null>(null)
+  const [currentVideoSecond, setCurrentVideoSecond] = useState(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const videoSyncFrameRef = useRef<number | null>(null)
+
+  const getVideoFrameTimestamp = (frame: { timestamp?: number; second?: number; frame?: number } | undefined | null) => {
+    if (!frame) {
+      return 0
+    }
+
+    if (typeof frame.timestamp === 'number' && Number.isFinite(frame.timestamp)) {
+      return frame.timestamp
+    }
+
+    if (typeof frame.second === 'number' && Number.isFinite(frame.second)) {
+      return frame.second
+    }
+
+    if (typeof frame.frame === 'number' && Number.isFinite(frame.frame)) {
+      return frame.frame
+    }
+
+    return 0
+  }
+
+  useEffect(() => {
+    setCurrentVideoSecond(0)
+  }, [latestResult?.detectionId, selectedReadyFileId, sourceUploadFile?.name, sourceMode])
+
+  const findNearestVideoFrame = (time: number) => {
+    if (!latestResult?.videoFrames || latestResult.videoFrames.length === 0) {
+      return null
+    }
+
+    let nearest = latestResult.videoFrames[0]
+    let nearestDistance = Number.POSITIVE_INFINITY
+
+    for (const frame of latestResult.videoFrames) {
+      const timestamp = getVideoFrameTimestamp(frame)
+      const distance = Math.abs(timestamp - time)
+      if (distance < nearestDistance) {
+        nearest = frame
+        nearestDistance = distance
+      }
+    }
+
+    return nearest
+  }
+
+  const resolvedVideoFrames = latestResult?.videoFrames ?? []
+
+  useEffect(() => {
+    if (!isVideoSource || resolvedVideoFrames.length === 0 || !videoRef.current) {
+      return
+    }
+
+    const video = videoRef.current
+    const targetFrame = findNearestVideoFrame(video.currentTime || 0)
+    if (targetFrame) {
+      setCurrentVideoSecond(getVideoFrameTimestamp(targetFrame))
+    }
+  }, [isVideoSource, resolvedVideoFrames.length, latestResult?.detectionId])
+
+  useEffect(() => {
+    if (!isVideoSource || !latestResult?.videoFrames || latestResult.videoFrames.length === 0) {
+      return
+    }
+
+    const video = videoRef.current
+    if (!video) {
+      return
+    }
+
+    const stopSyncLoop = () => {
+      if (videoSyncFrameRef.current !== null) {
+        if (typeof video.cancelVideoFrameCallback === 'function') {
+          video.cancelVideoFrameCallback(videoSyncFrameRef.current)
+        }
+        cancelAnimationFrame(videoSyncFrameRef.current)
+        videoSyncFrameRef.current = null
+      }
+    }
+
+    const syncVideoOverlay = () => {
+      const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0
+      const matchedFrame = findNearestVideoFrame(currentTime)
+      const nextTime = matchedFrame ? getVideoFrameTimestamp(matchedFrame) : currentTime
+      setCurrentVideoSecond(nextTime)
+
+      if (!video.paused) {
+        if (typeof video.requestVideoFrameCallback === 'function') {
+          videoSyncFrameRef.current = video.requestVideoFrameCallback(() => syncVideoOverlay())
+        } else {
+          videoSyncFrameRef.current = requestAnimationFrame(syncVideoOverlay)
+        }
+      }
+    }
+
+    const handleSeeked = () => {
+      stopSyncLoop()
+      syncVideoOverlay()
+    }
+
+    const handlePause = () => {
+      stopSyncLoop()
+      syncVideoOverlay()
+    }
+
+    const handleTimeUpdate = () => {
+      syncVideoOverlay()
+    }
+
+    video.addEventListener('timeupdate', handleTimeUpdate)
+    video.addEventListener('seeked', handleSeeked)
+    video.addEventListener('play', syncVideoOverlay)
+    video.addEventListener('pause', handlePause)
+
+    if (!video.paused) {
+      syncVideoOverlay()
+    }
+
+    return () => {
+      stopSyncLoop()
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+      video.removeEventListener('seeked', handleSeeked)
+      video.removeEventListener('play', syncVideoOverlay)
+      video.removeEventListener('pause', handlePause)
+    }
+  }, [isVideoSource, latestResult?.videoFrames, latestResult?.detectionId])
+
+  const activeVideoDetections = sourceMode !== 'camera' && latestResult?.videoFrames && latestResult.videoFrames.length > 0
+    ? findNearestVideoFrame(currentVideoSecond)?.detections
+      ?? latestResult.videoFrames[latestResult.videoFrames.length - 1].detections
+    : latestResult?.detections ?? []
 
   const getVehicleStyle = (label: string) => {
     const normalized = label.toLowerCase()
@@ -184,7 +323,7 @@ export function VehicleDetectionPage({
                   <div className="upload-icon compact">+</div>
                   <div>
                     <strong>{sourceUploadFile ? sourceUploadFile.name : 'Select a file to upload'}</strong>
-                    <span>{sourceUploadFile ? `${formatBytes(sourceUploadFile.size)} • Ready for FastAPI` : 'JPG, JPEG, PNG, MP4 • Max 50 MB'}</span>
+                    <span>{sourceUploadFile ? `${formatBytes(sourceUploadFile.size)} • Ready for FastAPI` : 'JPG, JPEG, PNG, MP4 • Max 500 MB'}</span>
                   </div>
                 </div>
               </div>
@@ -292,17 +431,36 @@ export function VehicleDetectionPage({
                   style={previewAspectRatio ? { aspectRatio: `${previewAspectRatio}` } : undefined}
                 >
                   {(selectedSource?.fileType === 'video' || (sourceMode === 'upload' && sourceUploadFile && sourceUploadFile.name.toLowerCase().endsWith('.mp4'))) ? (
-                    <video src={sourcePreviewUrl} controls className="detection-source-video" />
+                    <video
+                      ref={videoRef}
+                      key={`${selectedSource?.id ?? sourceUploadFile?.name ?? 'video'}-${latestResult?.detectionId ?? 'new'}`}
+                      src={sourcePreviewUrl}
+                      controls
+                      className="detection-source-video"
+                      onLoadedMetadata={(event) => {
+                        const { videoWidth, videoHeight } = event.currentTarget
+                        if (videoWidth > 0 && videoHeight > 0) {
+                          setPreviewAspectRatio(videoWidth / videoHeight)
+                        }
+                      }}
+                      onSeeked={(event) => {
+                        const currentTime = Number.isFinite(event.currentTarget.currentTime) ? event.currentTarget.currentTime : 0
+                        const matchedFrame = findNearestVideoFrame(currentTime)
+                        if (matchedFrame) {
+                          setCurrentVideoSecond(getVideoFrameTimestamp(matchedFrame))
+                        }
+                      }}
+                    />
                   ) : (
                     <img src={sourcePreviewUrl} alt="Detection source preview" className="detection-source-image" />
                   )}
-                  {latestResult?.detections && latestResult.detections.length > 0 ? (
-                    latestResult.detections.map((item, index) => {
+                  {activeVideoDetections && activeVideoDetections.length > 0 ? (
+                    activeVideoDetections.map((item, index) => {
                       const box = item.boundingBox ?? { x: 15 + index * 18, y: 22 + index * 12, width: 24, height: 16 }
                       const style = getVehicleStyle(item.className)
                       return (
                         <div
-                          key={`${item.className}-${index}`}
+                          key={`${item.className}-${index}-${currentVideoSecond}`}
                           className="bbox-box"
                           style={{
                             left: `${box.x}%`,

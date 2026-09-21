@@ -94,6 +94,13 @@ export interface Detection {
   boundingBox?: BoundingBox;
 }
 
+export interface VideoFrameDetections {
+  frame?: number;
+  second?: number;
+  timestamp?: number;
+  detections: Detection[];
+}
+
 export interface DetectionResult {
   detectionId: string;
   sourceFile: string;
@@ -102,6 +109,7 @@ export interface DetectionResult {
   processingTime: number;
   detections: Detection[];
   resultUrl?: string;
+  videoFrames?: VideoFrameDetections[];
 }
 
 export interface SystemInfo {
@@ -184,7 +192,23 @@ const normalizeDetectionResponse = (
       boundingBox: item.boundingBox ?? { x: 0, y: 0, width: 0, height: 0 },
     }));
 
-  if (detections.length === 0 && !payload.processedImage && !payload.resultUrl && !payload.resultImageUrl) {
+  const videoFrames = Array.isArray(payload.videoFrames)
+    ? payload.videoFrames.map((frame) => ({
+        frame: Number(frame.frame ?? 0),
+        second: Number(frame.second ?? frame.timestamp ?? 0),
+        timestamp: Number(frame.timestamp ?? frame.second ?? 0),
+        detections: Array.isArray(frame.detections) ? frame.detections
+          .filter((item): item is VehicleDetectionResult => Boolean(item && typeof item.className === 'string'))
+          .map((item) => ({
+            className: item.className,
+            confidence: Number(item.confidence ?? 0),
+            boundingBox: item.boundingBox ?? { x: 0, y: 0, width: 0, height: 0 },
+          }))
+          : [],
+      }))
+    : undefined;
+
+  if (detections.length === 0 && !payload.processedImage && !payload.resultUrl && !payload.resultImageUrl && (!videoFrames || videoFrames.length === 0)) {
     return null;
   }
 
@@ -204,6 +228,7 @@ const normalizeDetectionResponse = (
     processingTime: Number(payload.processingTime ?? 0),
     detections,
     resultUrl: payload.resultUrl ?? payload.processedImage ?? payload.resultImageUrl,
+    videoFrames,
   };
 };
 

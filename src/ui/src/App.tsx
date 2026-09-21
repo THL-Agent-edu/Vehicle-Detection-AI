@@ -122,6 +122,19 @@ function App() {
     setStatistics(buildDataStatistics(files))
   }, [files])
 
+  useEffect(() => {
+    if (sourceMode !== 'data') {
+      return
+    }
+
+    if (!selectedReadyFileId) {
+      const firstReadyFile = files.find((item) => item.status === 'ready' || item.status === 'processed')
+      if (firstReadyFile) {
+        setSelectedReadyFileId(firstReadyFile.id)
+      }
+    }
+  }, [files, selectedReadyFileId, sourceMode])
+
   const handleBrowseClick = () => {
     fileInputRef.current?.click()
   }
@@ -132,7 +145,7 @@ function App() {
     }
 
     const allowedExtensions = ['jpg', 'jpeg', 'png', 'mp4']
-    const maxFileSize = 50 * 1024 * 1024
+    const maxFileSize = 500 * 1024 * 1024
     const validFiles: File[] = []
 
     for (const file of Array.from(fileList)) {
@@ -143,7 +156,7 @@ function App() {
       }
 
       if (file.size > maxFileSize) {
-        setUploadError('File size exceeds the 50 MB limit.')
+        setUploadError('File size exceeds the 500 MB limit.')
         return
       }
 
@@ -251,16 +264,21 @@ function App() {
         resultUrl?: string
       }
 
-      if (sourceMode === 'data' && selectedReadyFileId) {
-        const sourceFile = files.find((item) => item.id === selectedReadyFileId)
+      if (sourceMode === 'data') {
+        const effectiveFileId = selectedReadyFileId ?? files.find((item) => item.status === 'ready' || item.status === 'processed')?.id ?? null
+        if (!effectiveFileId) {
+          throw new Error('No source selected')
+        }
+
+        const sourceFile = files.find((item) => item.id === effectiveFileId)
         if (!sourceFile) throw new Error('Selected file not found')
 
         result = sourceFile.fileType === 'video' || settings.mode === 'Video'
-          ? await api.detectVideo(selectedReadyFileId, {
+          ? await api.detectVideo(effectiveFileId, {
               ...settings,
               mode: settings.mode,
             })
-          : await api.detectImage(selectedReadyFileId, {
+          : await api.detectImage(effectiveFileId, {
               ...settings,
               mode: settings.mode,
             })
@@ -458,7 +476,7 @@ function App() {
 
               <label>
                 Max file size
-                <input defaultValue="50 MB" />
+                <input defaultValue="500 MB" />
               </label>
 
               <label>

@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import cv2
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = ROOT / "models" / "best.pt"
 RUNS_DIR = ROOT / "runs" / "detect"
 UPLOAD_DIR = ROOT / "uploads"
+MAX_UPLOAD_SIZE_MB = 500
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 DEFAULT_SAMPLE_IMAGES = [
     ROOT / "test_images",
@@ -110,9 +113,98 @@ def normalize_box(coords: list[float], image_width: int, image_height: int) -> d
     }
 
 
+def infer_video_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[str, Any]:
+    if not source.exists():
+        raise FileNotFoundError(f"Source file not found: {source}")
+
+    run_id = f"api_{uuid.uuid4().hex[:8]}"
+    result_dir = RUNS_DIR / run_id
+    result_dir.mkdir(parents=True, exist_ok=True)
+
+    video = cv2.VideoCapture(str(source))
+    if not video.isOpened():
+        raise ValueError(f"Unable to read video source: {source}")
+
+    fps = video.get(cv2.CAP_PROP_FPS) or 30.0
+    preview_frame: Any | None = None
+    frame_entries: list[dict[str, Any]] = []
+    frame_count = 0
+    start_time = time.perf_counter()
+
+    while True:
+        ok, frame = video.read()
+        if not ok:
+            break
+        if preview_frame is None:
+            preview_frame = frame.copy()
+
+        frame_index = frame_count
+        timestamp = frame_index / max(1.0, fps)
+        current_batch: list[dict[str, Any]] = []
+
+        results = model(frame, conf=conf, iou=iou, imgsz=imgsz, verbose=False)
+        if results and len(results) > 0:
+            result = results[0]
+            boxes = result.boxes
+            if boxes is not None and len(boxes) > 0:
+                image_width = int(result.orig_shape[1]) if getattr(result, 'orig_shape', None) else frame.shape[1]
+                image_height = int(result.orig_shape[0]) if getattr(result, 'orig_shape', None) else frame.shape[0]
+                for box in boxes:
+                    if box.cls is None or box.conf is None or len(box.cls) == 0:
+                        continue
+                    cls_index = int(box.cls[0].item()) if hasattr(box.cls[0], 'item') else int(box.cls[0])
+                    confidence = float(box.conf[0].item()) if hasattr(box.conf[0], 'item') else float(box.conf[0])
+                    coords = box.xyxy[0].tolist() if hasattr(box.xyxy[0], 'tolist') else list(box.xyxy[0])
+                    label = model.names.get(cls_index, str(cls_index))
+                    entry = {
+                        "className": label,
+                        "confidence": round(confidence * 100, 1),
+                        "boundingBox": normalize_box(coords, image_width, image_height),
+                    }
+                    current_batch.append(entry)
+        frame_entries.append({"frame": frame_index, "timestamp": round(timestamp, 3), "detections": current_batch})
+        frame_count += 1
+
+    video.release()
+
+    if preview_frame is not None:
+        preview_path = result_dir / "preview.jpg"
+        cv2.imwrite(str(preview_path), preview_frame)
+    else:
+        preview_path = None
+
+    time_series = [
+        {"frame": item["frame"], "timestamp": item["timestamp"], "detections": item["detections"]}
+        for item in frame_entries
+    ]
+
+    current_detections = time_series[-1]["detections"] if time_series else []
+    result_url = None
+    if preview_path is not None and preview_path.exists():
+        relative_path = preview_path.relative_to(ROOT / "runs")
+        result_url = f"http://127.0.0.1:8000/results/{relative_path.as_posix()}"
+
+    total_vehicles = len(current_detections)
+    average_confidence = round(sum(item["confidence"] for item in current_detections) / total_vehicles, 1) if total_vehicles else 0.0
+
+    return {
+        "detectionId": f"det-{uuid.uuid4().hex[:10]}",
+        "sourceFile": source.name,
+        "totalVehicles": total_vehicles,
+        "averageConfidence": average_confidence,
+        "processingTime": round(time.perf_counter() - start_time, 3),
+        "detections": current_detections,
+        "resultUrl": result_url,
+        "videoFrames": time_series,
+    }
+
+
 def infer_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[str, Any]:
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source}")
+
+    if source.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv", ".webm"}:
+        return infer_video_detection(source, conf, iou, imgsz)
 
     run_id = f"api_{uuid.uuid4().hex[:8]}"
     results = model(
@@ -200,7 +292,7 @@ async def settings() -> dict[str, Any]:
         "iouThreshold": 0.45,
         "inputResolution": "640",
         "detectionMode": "Image",
-        "maxFileSize": "50 MB",
+        "maxFileSize": "500 MB",
         "supportedFormats": ".jpg, .png, .mp4",
     }
 
@@ -268,6 +360,8 @@ async def upload_file(file: UploadFile = File(...)) -> dict[str, Any]:
     file_id = f"{uuid.uuid4().hex}_{file.filename}"
     destination = UPLOAD_DIR / file_id
     file_bytes = await file.read()
+    if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail=f"File size exceeds the {MAX_UPLOAD_SIZE_MB} MB limit.")
     with destination.open("wb") as buffer:
         buffer.write(file_bytes)
     return {
