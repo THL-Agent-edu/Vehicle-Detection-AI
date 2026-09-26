@@ -49,6 +49,29 @@ Vehicle-Detection-AI/
 
 ## 5. Cài đặt
 
+### 5.0 Train model trên Google Colab
+
+Không chạy các script `train_v2_*.py` trên máy cá nhân để train. Dùng Google Colab với GPU:
+
+1. Tạo thư mục `Vehicle-Detection-AI` trong Google Drive, rồi tải `dataset_v2_clean/` và `scripts/train_colab.py` lên đúng cấu trúc thư mục.
+2. Mở [Google Colab](https://colab.research.google.com/), tạo notebook mới và chọn **Runtime > Change runtime type > T4 GPU**.
+3. Chạy lần lượt các cell sau:
+
+```python
+!pip install -q ultralytics pyyaml
+```
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+```
+
+```python
+!python /content/drive/MyDrive/Vehicle-Detection-AI/scripts/train_colab.py
+```
+
+Script xác nhận GPU và cấu trúc dataset, chép dataset sang ổ tạm Colab để train, sau đó lưu log vào `Vehicle-Detection-AI/runs/train/` và model tốt nhất vào `Vehicle-Detection-AI/models/best_v2.pt` trên Drive. Nếu GPU không khả dụng, hãy kiểm tra lại runtime type trước khi chạy.
+
 ### 5.1 Tạo môi trường Python
 
 Windows PowerShell:

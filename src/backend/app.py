@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL_PATH = ROOT / "models" / "best.pt"
+DEFAULT_MODEL_NAME = "best_v2.pt"
+MODEL_PATH = ROOT / "models" / DEFAULT_MODEL_NAME
 RUNS_DIR = ROOT / "runs" / "detect"
 UPLOAD_DIR = ROOT / "uploads"
 MAX_UPLOAD_SIZE_MB = 500
@@ -26,7 +27,7 @@ DEFAULT_SAMPLE_IMAGES = [
 
 
 class DetectionSettings(BaseModel):
-    model: str = "best.pt"
+    model: str = DEFAULT_MODEL_NAME
     confidence: float = Field(default=0.25, ge=0.05, le=1.0)
     iou: float = Field(default=0.45, ge=0.05, le=1.0)
     imageSize: int = Field(default=640, ge=320, le=1280)
@@ -71,6 +72,23 @@ app.add_middleware(
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def resolve_model_path(model_name: str | None = None) -> Path:
+    name = (model_name or DEFAULT_MODEL_NAME).strip()
+    if not name:
+        return MODEL_PATH
+
+    repo_candidates = [
+        ROOT / "models" / name,
+        ROOT / "weights" / name,
+    ]
+    for candidate in repo_candidates:
+        if candidate.exists():
+            return candidate
+
+    return Path(name)
+
+
 model = YOLO(str(MODEL_PATH))
 app.mount("/results", StaticFiles(directory=str(ROOT / "runs")), name="results")
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -111,6 +129,70 @@ def normalize_box(coords: list[float], image_width: int, image_height: int) -> d
         "width": round((width / max(image_width, 1)) * 100, 2),
         "height": round((height / max(image_height, 1)) * 100, 2),
     }
+
+
+def _box_iou(box_a: list[float], box_b: list[float]) -> float:
+    x1 = max(box_a[0], box_b[0])
+    y1 = max(box_a[1], box_b[1])
+    x2 = min(box_a[2], box_b[2])
+    y2 = min(box_a[3], box_b[3])
+    inter_w = max(0.0, x2 - x1)
+    inter_h = max(0.0, y2 - y1)
+    inter = inter_w * inter_h
+    area_a = max(0.0, box_a[2] - box_a[0]) * max(0.0, box_a[3] - box_a[1])
+    area_b = max(0.0, box_b[2] - box_b[0]) * max(0.0, box_b[3] - box_b[1])
+    union = area_a + area_b - inter
+    return 0.0 if union <= 0 else inter / union
+
+
+def merge_model_results(results: list[Any], iou_threshold: float = 0.45) -> list[dict[str, Any]]:
+    accepted: list[dict[str, Any]] = []
+    for result in results:
+        if result is None or getattr(result, 'boxes', None) is None:
+            continue
+
+        image_width = int(result.orig_shape[1]) if getattr(result, 'orig_shape', None) else 640
+        image_height = int(result.orig_shape[0]) if getattr(result, 'orig_shape', None) else 640
+
+        for box in result.boxes:
+            if box.cls is None or box.conf is None or len(box.cls) == 0:
+                continue
+            cls_index = int(box.cls[0].item()) if hasattr(box.cls[0], 'item') else int(box.cls[0])
+            confidence = float(box.conf[0].item()) if hasattr(box.conf[0], 'item') else float(box.conf[0])
+            coords = box.xyxy[0].tolist() if hasattr(box.xyxy[0], 'tolist') else list(box.xyxy[0])
+            if hasattr(result, 'names'):
+                label = result.names.get(cls_index, str(cls_index))
+            else:
+                label = 'vehicle' if cls_index == 0 else str(cls_index)
+            item = {
+                'className': label,
+                'confidence': confidence,
+                'coords': [float(v) for v in coords],
+                'image_width': image_width,
+                'image_height': image_height,
+            }
+            duplicate = False
+            for existing in accepted:
+                if existing['className'] != item['className']:
+                    continue
+                if _box_iou(existing['coords'], item['coords']) >= iou_threshold:
+                    if item['confidence'] > existing['confidence']:
+                        existing.update(item)
+                    duplicate = True
+                    break
+            if not duplicate:
+                accepted.append(item)
+
+    merged: list[dict[str, Any]] = []
+    for item in accepted:
+        image_width = int(item.get('image_width', 640))
+        image_height = int(item.get('image_height', 640))
+        merged.append({
+            'className': item['className'],
+            'confidence': round(float(item['confidence']) * 100, 1),
+            'boundingBox': normalize_box(item['coords'], image_width, image_height),
+        })
+    return merged
 
 
 def infer_video_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[str, Any]:
@@ -162,6 +244,9 @@ def infer_video_detection(source: Path, conf: float, iou: float, imgsz: int) -> 
                         "boundingBox": normalize_box(coords, image_width, image_height),
                     }
                     current_batch.append(entry)
+
+        if hasattr(model, 'ensemble'):
+            pass
         frame_entries.append({"frame": frame_index, "timestamp": round(timestamp, 3), "detections": current_batch})
         frame_count += 1
 
@@ -221,25 +306,36 @@ def infer_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[s
     if not results or len(results) == 0:
         raise ValueError("No detection results were produced for the selected source.")
 
-    first_result = results[0]
-    boxes = first_result.boxes
-    image_width = int(first_result.orig_shape[1]) if getattr(first_result, 'orig_shape', None) else 640
-    image_height = int(first_result.orig_shape[0]) if getattr(first_result, 'orig_shape', None) else 640
-
-    detections: list[dict[str, Any]] = []
-    for i, box in enumerate(boxes):
-        if box.cls is None or box.conf is None or len(box.cls) == 0:
+    model_names = ["best_v2.pt", "best.pt"]
+    ensemble_results = []
+    for name in model_names:
+        model_path = resolve_model_path(name)
+        if not model_path.exists():
             continue
-        cls_index = int(box.cls[0].item()) if hasattr(box.cls[0], 'item') else int(box.cls[0])
-        confidence = float(box.conf[0].item()) if hasattr(box.conf[0], 'item') else float(box.conf[0])
-        coords = box.xyxy[0].tolist() if hasattr(box.xyxy[0], 'tolist') else list(box.xyxy[0])
-        label = model.names.get(cls_index, str(cls_index))
+        ensemble_results.append(YOLO(str(model_path))(str(source), conf=conf, iou=iou, imgsz=imgsz, verbose=False)[0])
 
-        detections.append({
-            "className": label,
-            "confidence": round(confidence * 100, 1),
-            "boundingBox": normalize_box(coords, image_width, image_height),
-        })
+    if ensemble_results:
+        detections = merge_model_results(ensemble_results, iou_threshold=max(0.15, min(0.45, iou)))
+    else:
+        first_result = results[0]
+        boxes = first_result.boxes
+        image_width = int(first_result.orig_shape[1]) if getattr(first_result, 'orig_shape', None) else 640
+        image_height = int(first_result.orig_shape[0]) if getattr(first_result, 'orig_shape', None) else 640
+
+        detections = []
+        for i, box in enumerate(boxes):
+            if box.cls is None or box.conf is None or len(box.cls) == 0:
+                continue
+            cls_index = int(box.cls[0].item()) if hasattr(box.cls[0], 'item') else int(box.cls[0])
+            confidence = float(box.conf[0].item()) if hasattr(box.conf[0], 'item') else float(box.conf[0])
+            coords = box.xyxy[0].tolist() if hasattr(box.xyxy[0], 'tolist') else list(box.xyxy[0])
+            label = model.names.get(cls_index, str(cls_index))
+
+            detections.append({
+                "className": label,
+                "confidence": round(confidence * 100, 1),
+                "boundingBox": normalize_box(coords, image_width, image_height),
+            })
 
     result_dir = RUNS_DIR / run_id
     rendered_files = sorted(result_dir.rglob("*.jpg")) + sorted(result_dir.rglob("*.jpeg")) + sorted(result_dir.rglob("*.png"))
@@ -274,7 +370,7 @@ async def system_info() -> dict[str, str]:
     return {
         "system": "Vehicle Detection AI",
         "description": "YOLOv8 vehicle detection system",
-        "aiModel": "best.pt",
+        "aiModel": "best_v2.pt",
         "backend": "FastAPI",
         "frontend": "React + TypeScript + Vite",
         "computerVision": "OpenCV + Ultralytics",
@@ -287,7 +383,7 @@ async def system_info() -> dict[str, str]:
 @app.get("/settings")
 async def settings() -> dict[str, Any]:
     return {
-        "model": "best.pt",
+        "model": "best_v2.pt",
         "confidenceThreshold": 0.25,
         "iouThreshold": 0.45,
         "inputResolution": "640",
@@ -383,6 +479,12 @@ async def detect(payload: DetectionRequest) -> dict[str, Any]:
         mode = (payload.mode or settings.mode or "Image").strip()
         if mode.lower() not in {"image", "video", "camera"}:
             mode = "Image"
+
+        selected_model_name = (settings.model or DEFAULT_MODEL_NAME).strip()
+        selected_model_path = resolve_model_path(selected_model_name)
+        if selected_model_name.lower() in {"best.pt", "best_v2.pt", "yolov8n.pt", "yolov8s.pt"} or selected_model_path.exists():
+            global model
+            model = YOLO(str(selected_model_path))
 
         result = infer_detection(
             source=source,

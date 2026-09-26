@@ -49,6 +49,7 @@ coverage.xml
 
 # Virtual environments
 .venv/
+.venv-gpu/
 venv/
 env/
 ENV/
@@ -71,15 +72,24 @@ data/valid/**
 !data/train/.gitkeep
 !data/valid/.gitkeep
 
-# Giữ lại file config và mô tả dataset
-!data/data.yaml
-!data/README.dataset.txt
-!data/README.roboflow.txt
+# Large local datasets and archives
+**/dataset_*/
+**/dataset_vietnam_raw/
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.gz
+**/*.rar
 
-# YOLO training results
+# Local uploads and generated content
+uploads/
+results/
 runs/**
 !runs/.gitkeep
 !runs/**/.gitkeep
+
+test_images/
+weights/
 
 # Trained model weights
 models/**
@@ -95,8 +105,17 @@ models/**
 *.bmp
 *.gif
 
+# Large frontend dependency folders
+**/node_modules/
+
+# Giữ lại file config và mô tả dataset
+!data/data.yaml
+!data/README.dataset.txt
+!data/README.roboflow.txt
+
 # Logs / caches
 *.log
 *.cache
 __pycache__/
 .pytest_cache/
+**/__pycache__/

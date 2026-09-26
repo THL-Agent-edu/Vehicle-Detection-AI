@@ -59,7 +59,7 @@ function App() {
     imageSize: number
     mode: 'Image' | 'Video' | 'Camera'
   }>({
-    model: 'best.pt',
+    model: 'best_v2.pt',
     confidence: 0.5,
     iou: 0.45,
     imageSize: 640,

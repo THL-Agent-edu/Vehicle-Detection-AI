@@ -117,3 +117,24 @@ def test_infer_video_detection_processes_full_video_length(monkeypatch, tmp_path
 
     assert len(result['videoFrames']) == 150
     assert result['videoFrames'][-1]['timestamp'] == round(149 / 30.0, 3)
+
+
+def test_ensemble_merge_deduplicates_overlapping_boxes():
+    class BoxA:
+        cls = [0]
+        conf = [0.9]
+        xyxy = [[0.0, 0.0, 10.0, 10.0]]
+
+    class BoxB:
+        cls = [0]
+        conf = [0.8]
+        xyxy = [[1.0, 1.0, 11.0, 11.0]]
+
+    first_result = SimpleNamespace(boxes=[BoxA()], orig_shape=(20, 20))
+    second_result = SimpleNamespace(boxes=[BoxB()], orig_shape=(20, 20))
+
+    merged = app_module.merge_model_results([first_result, second_result], iou_threshold=0.45)
+
+    assert len(merged) == 1
+    assert merged[0]['confidence'] >= 0.8
+    assert merged[0]['className'] == 'vehicle'

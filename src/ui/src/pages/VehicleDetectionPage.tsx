@@ -360,6 +360,8 @@ export function VehicleDetectionPage({
                 Detection Model
                 <select value={settings.model} onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))}>
                   <option value="best.pt">best.pt</option>
+                  <option value="best_v2.pt">best_v2.pt</option>
+                  <option value="ensemble">ensemble</option>
                   <option value="yolov8n.pt">yolov8n.pt</option>
                   <option value="yolov8s.pt">yolov8s.pt</option>
                 </select>
