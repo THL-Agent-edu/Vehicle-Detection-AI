@@ -103,6 +103,16 @@ cd src/ui
 npm install
 ```
 
+### 5.4 Đánh giá F1 score
+
+Sau khi có model tại `models/best_v2.pt`, chạy đánh giá trên tập validation:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.model.evaluate
+```
+
+Kết quả F1 tổng hợp và theo từng lớp được lưu tại `runs/metrics/f1_score.json`. Backend cung cấp kết quả qua endpoint `/metrics` và hiển thị trong mục **System Information**. Tham số `--conf` mặc định là `0.25`, có thể thay đổi để cân bằng precision và recall.
+
 ## 6. Chạy ứng dụng
 
 ### 6.1 Chạy backend

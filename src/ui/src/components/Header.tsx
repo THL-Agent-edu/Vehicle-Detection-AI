@@ -2,9 +2,10 @@ type HeaderProps = {
   title: string;
   subtitle?: string;
   actionLabel?: string;
+  onAction?: () => void;
 };
 
-export function Header({ title, subtitle, actionLabel = 'Interface' }: HeaderProps) {
+export function Header({ title, subtitle, actionLabel = 'Interface', onAction }: HeaderProps) {
   return (
     <header className="page-header">
       <div>
@@ -12,7 +13,7 @@ export function Header({ title, subtitle, actionLabel = 'Interface' }: HeaderPro
         <h1>{title}</h1>
       </div>
 
-      <button type="button" className="primary-btn small">
+      <button type="button" className="primary-btn small" onClick={onAction}>
         {actionLabel}
       </button>
     </header>

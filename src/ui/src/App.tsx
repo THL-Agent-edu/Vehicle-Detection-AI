@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { Header } from './components/Header'
 import { Sidebar } from './components/Sidebar'
-import { api, type DataStatistics, type UploadedFile } from './services/api'
+import { api, type CameraStatus, type DataStatistics, type DetectionReport, type DetectionSettings, type UploadedFile, type ValidationMetrics } from './services/api'
 import { DataManagementPage } from './pages/DataManagementPage'
 import { VehicleDetectionPage } from './pages/VehicleDetectionPage'
 import { buildDataStatistics, getFileType } from './utils/fileUtils'
@@ -26,12 +26,6 @@ const systemCards = [
   { label: 'Processing', value: 'Real-time', detail: 'Average 220 ms / frame' },
 ]
 
-const reportRows = [
-  { date: '2025-07-14', file: 'city_morning.mp4', type: 'Video', total: 184, runtime: '03:44', status: 'Completed' },
-  { date: '2025-07-14', file: 'lot_a_01.jpg', type: 'Image', total: 42, runtime: '00:52', status: 'Completed' },
-  { date: '2025-07-13', file: 'night_shift.mp4', type: 'Video', total: 217, runtime: '05:11', status: 'Processing' },
-]
-
 const defaultStatistics: DataStatistics = {
   totalFiles: 0,
   totalImages: 0,
@@ -43,6 +37,12 @@ function App() {
   const [activePage, setActivePage] = useState('Data Management')
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [statistics, setStatistics] = useState<DataStatistics>(defaultStatistics)
+  const [validationMetrics, setValidationMetrics] = useState<ValidationMetrics | null>(null)
+  const [reports, setReports] = useState<DetectionReport[]>([])
+  const [reportsLoading, setReportsLoading] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null)
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -52,18 +52,13 @@ function App() {
   const [processingProgress, setProcessingProgress] = useState<Record<string, number>>({})
   const [sourceMode, setSourceMode] = useState<SourceMode>('data')
   const [selectedReadyFileId, setSelectedReadyFileId] = useState<string | null>(null)
-  const [settings, setSettings] = useState<{
-    model: string
-    confidence: number
-    iou: number
-    imageSize: number
-    mode: 'Image' | 'Video' | 'Camera'
-  }>({
+  const [settings, setSettings] = useState<DetectionSettings>({
     model: 'best_v2.pt',
     confidence: 0.5,
     iou: 0.45,
     imageSize: 640,
     mode: 'Image',
+    cameraUrl: '',
   })
   const [sourceUploadFile, setSourceUploadFile] = useState<File | null>(null)
   const [isCameraRunning, setIsCameraRunning] = useState(false)
@@ -82,6 +77,49 @@ function App() {
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const uploadSourceInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (activePage !== 'System Information') return
+
+    api.getValidationMetrics()
+      .then(setValidationMetrics)
+      .catch(() => setValidationMetrics(null))
+  }, [activePage])
+
+  useEffect(() => {
+    if (activePage !== 'Settings') return
+
+    setSettingsMessage(null)
+    api.getDetectionSettings()
+      .then((loadedSettings) => setSettings({
+        ...loadedSettings,
+        cameraUrl: loadedSettings.cameraUrl ?? '',
+      }))
+      .catch(() => setSettingsMessage('Unable to load saved settings.'))
+
+    api.getCameraStatus().then(setCameraStatus).catch(() => setCameraStatus(null))
+  }, [activePage])
+
+  useEffect(() => {
+    if (activePage !== 'Settings' || !cameraStatus?.running) return
+    const interval = window.setInterval(() => {
+      api.getCameraStatus().then((status) => {
+        setCameraStatus(status)
+        if (status.error) setSettingsMessage(status.error)
+      }).catch(() => undefined)
+    }, 1000)
+    return () => window.clearInterval(interval)
+  }, [activePage, cameraStatus?.running])
+
+  useEffect(() => {
+    if (activePage !== 'Reports') return
+
+    setReportsLoading(true)
+    api.getReports()
+      .then(setReports)
+      .catch(() => setReports([]))
+      .finally(() => setReportsLoading(false))
+  }, [activePage])
 
   useEffect(() => {
     if (activePage !== 'Data Management') return
@@ -305,6 +343,7 @@ function App() {
       }
 
       setLatestResult(result)
+      api.getReports().then(setReports).catch(() => undefined)
       setProcessingMessage('Detection completed successfully.')
     } catch (error) {
       console.error(error)
@@ -341,6 +380,62 @@ function App() {
     setProcessingMessage('Processing... Please wait.')
   }
 
+  const handleAnalyzeData = () => {
+    setActivePage('System Information')
+  }
+
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true)
+    setSettingsMessage(null)
+    try {
+      const saved = await api.updateDetectionSettings(settings)
+      setSettings(saved)
+      setSettingsMessage('Settings saved successfully.')
+    } catch {
+      setSettingsMessage('Unable to save settings.')
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  const handleStartLiveCamera = async () => {
+    try {
+      const response = await api.startCamera({ ...settings, mode: 'Camera' })
+      setSettings((current) => ({ ...current, mode: 'Camera' }))
+      setCameraStatus({ running: response.running, url: response.url, frame: 0, detections: [], error: null })
+      setSettingsMessage('Traffic camera recognition started.')
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? error.message : 'Unable to start the traffic camera.')
+    }
+  }
+
+  const handleStopLiveCamera = () => {
+    api.stopCamera().then(() => setCameraStatus((current) => current ? { ...current, running: false } : null)).catch(() => undefined)
+    setSettingsMessage('Traffic camera recognition stopped.')
+  }
+
+  const handleExportReports = () => {
+    if (reports.length === 0) return
+
+    const header = ['Date', 'File', 'Type', 'Vehicles', 'Runtime (s)', 'Status']
+    const rows = reports.map((report) => [
+      report.date,
+      report.fileName,
+      report.type,
+      report.totalVehicles,
+      report.processingTime,
+      report.status,
+    ])
+    const csv = [header, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
+      .join('\n')
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    link.download = `vehicle-detection-reports-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
   const renderPage = () => {
     if (activePage === 'Vehicle Detection') {
       return (
@@ -365,6 +460,7 @@ function App() {
           onRunDetection={handleRunDetection}
           onDownloadResult={handleDownloadResult}
           onClearResult={handleClearResult}
+          onOpenHistory={() => setActivePage('Reports')}
           uploadSourceInputRef={uploadSourceInputRef}
         />
       )
@@ -380,6 +476,13 @@ function App() {
               <span>{card.detail}</span>
             </article>
           ))}
+          {validationMetrics && (
+            <article className="section-card info-card">
+              <p className="mini-label">Validation F1 score</p>
+              <h3>{(validationMetrics.f1 * 100).toFixed(1)}%</h3>
+              <span>Precision {(validationMetrics.precision * 100).toFixed(1)}% / Recall {(validationMetrics.recall * 100).toFixed(1)}%</span>
+            </article>
+          )}
         </section>
       )
     }
@@ -392,7 +495,7 @@ function App() {
               <p className="eyebrow">Analysis history</p>
               <h2>Processing reports</h2>
             </div>
-            <button type="button" className="primary-btn small">
+            <button type="button" className="primary-btn small" onClick={handleExportReports} disabled={reports.length === 0}>
               Export report
             </button>
           </div>
@@ -410,13 +513,17 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {reportRows.map((row) => (
-                  <tr key={`${row.date}-${row.file}`}>
-                    <td>{row.date}</td>
-                    <td>{row.file}</td>
+                {reportsLoading ? (
+                  <tr><td colSpan={6}>Loading reports...</td></tr>
+                ) : reports.length === 0 ? (
+                  <tr><td colSpan={6}>No detection reports yet. Run a detection to create the first report.</td></tr>
+                ) : reports.map((row) => (
+                  <tr key={row.id}>
+                    <td>{new Date(row.date).toLocaleString()}</td>
+                    <td>{row.fileName}</td>
                     <td>{row.type}</td>
-                    <td>{row.total}</td>
-                    <td>{row.runtime}</td>
+                    <td>{row.totalVehicles}</td>
+                    <td>{row.processingTime.toFixed(2)}s</td>
                     <td>
                       <span className={`status-pill ${row.status.toLowerCase()}`}>{row.status}</span>
                     </td>
@@ -434,33 +541,80 @@ function App() {
         <section className="settings-grid">
           <article className="section-card">
             <div className="section-header compact">
-              <h2>Detection settings</h2>
+              <div>
+                <p className="eyebrow">Model controls</p>
+                <h2>Detection settings</h2>
+              </div>
+              <button type="button" className="primary-btn small" onClick={handleSaveSettings} disabled={settingsSaving}>
+                {settingsSaving ? 'Saving...' : 'Save settings'}
+              </button>
             </div>
 
             <div className="field-group">
               <label>
                 Model version
-                <select defaultValue="YOLOv8n">
-                  <option>YOLOv8n</option>
-                  <option>YOLOv8s</option>
-                  <option>YOLOv8m</option>
+                <select value={settings.model} onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))}>
+                  <option value="best.pt">best.pt</option>
+                  <option value="best_v2.pt">best_v2.pt</option>
+                  <option value="yolov8n.pt">yolov8n.pt</option>
+                  <option value="yolov8s.pt">yolov8s.pt</option>
                 </select>
               </label>
 
               <label>
-                Confidence threshold
-                <input type="range" defaultValue={78} />
+                Confidence threshold: {settings.confidence.toFixed(2)}
+                <input type="range" min="0.05" max="1" step="0.05" value={settings.confidence} onChange={(event) => setSettings((current) => ({ ...current, confidence: Number(event.target.value) }))} />
               </label>
 
               <label>
-                Input mode
-                <select defaultValue="Camera + image">
-                  <option>Camera + image</option>
-                  <option>Image only</option>
-                  <option>Video only</option>
+                IoU threshold: {settings.iou.toFixed(2)}
+                <input type="range" min="0.05" max="1" step="0.05" value={settings.iou} onChange={(event) => setSettings((current) => ({ ...current, iou: Number(event.target.value) }))} />
+              </label>
+
+              <label>
+                Input resolution
+                <select value={settings.imageSize} onChange={(event) => setSettings((current) => ({ ...current, imageSize: Number(event.target.value) }))}>
+                  <option value={320}>320 × 320</option>
+                  <option value={640}>640 × 640</option>
+                  <option value={1280}>1280 × 1280</option>
                 </select>
+              </label>
+
+              <label>
+                Detection mode
+                <select value={settings.mode} onChange={(event) => setSettings((current) => ({ ...current, mode: event.target.value as DetectionSettings['mode'] }))}>
+                  <option value="Image">Image</option>
+                  <option value="Video">Video</option>
+                  <option value="Camera">Camera</option>
+                </select>
+              </label>
+              <label>
+                Traffic camera URL
+                <input type="url" placeholder="rtsp://... or https://..." value={settings.cameraUrl} onChange={(event) => setSettings((current) => ({ ...current, cameraUrl: event.target.value }))} />
               </label>
             </div>
+            {settingsMessage && <p className="form-message">{settingsMessage}</p>}
+          </article>
+
+          <article className="section-card">
+            <div className="section-header compact">
+              <div>
+                <p className="eyebrow">Remote stream</p>
+                <h2>Traffic camera recognition</h2>
+              </div>
+              <span className={`status-pill ${cameraStatus?.running ? 'success' : 'warning'}`}>
+                {cameraStatus?.running ? 'Running' : 'Stopped'}
+              </span>
+            </div>
+            <p className="settings-help">YOLO reads the configured camera URL continuously on the backend. Supported sources: RTSP, HTTP and HTTPS streams.</p>
+            <div className="camera-runtime-stats">
+              <span>Frames: <strong>{cameraStatus?.frame ?? 0}</strong></span>
+              <span>Vehicles: <strong>{cameraStatus?.detections.length ?? 0}</strong></span>
+            </div>
+            <button type="button" className={cameraStatus?.running ? 'secondary-btn small' : 'primary-btn small'} onClick={cameraStatus?.running ? handleStopLiveCamera : handleStartLiveCamera} disabled={!settings.cameraUrl.trim()}>
+              {cameraStatus?.running ? 'Stop recognition' : 'Start recognition'}
+            </button>
+            {cameraStatus?.error && <p className="error-message">{cameraStatus.error}</p>}
           </article>
 
           <article className="section-card">
@@ -471,17 +625,17 @@ function App() {
             <div className="field-group">
               <label>
                 API base URL
-                <input defaultValue="http://localhost:8000/api" />
+                <input value={import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'} readOnly />
               </label>
 
               <label>
                 Max file size
-                <input defaultValue="500 MB" />
+                <input value="500 MB" readOnly />
               </label>
 
               <label>
                 Supported formats
-                <input defaultValue=".jpg, .png, .mp4" />
+                <input value=".jpg, .jpeg, .png, .mp4" readOnly />
               </label>
             </div>
           </article>
@@ -526,6 +680,7 @@ function App() {
           title={activePage}
           subtitle="AI vehicle detection dashboard"
           actionLabel="Analyze data"
+          onAction={handleAnalyzeData}
         />
 
         {renderPage()}

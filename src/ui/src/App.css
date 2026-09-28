@@ -319,6 +319,21 @@
       rgba(148, 163, 184, 0.14) 0,
       rgba(148, 163, 184, 0.14) 2px,
       rgba(255,255,255,0) 2px,
+  .live-camera-preview {
+    display: block;
+    width: 100%;
+    max-height: 260px;
+    margin-bottom: 14px;
+    border-radius: 12px;
+    background: #0f172a;
+    object-fit: cover;
+  }
+  .settings-help {
+    margin: 0 0 14px;
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
       rgba(255,255,255,0) 26px
     ),
     linear-gradient(180deg, #dfeaf6 0%, #c6d8f5 100%);

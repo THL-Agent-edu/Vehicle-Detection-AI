@@ -26,6 +26,7 @@ type VehicleDetectionPageProps = {
   onRunDetection: () => void
   onDownloadResult: () => void
   onClearResult: () => void
+  onOpenHistory: () => void
   uploadSourceInputRef: RefObject<HTMLInputElement | null>
 }
 
@@ -52,6 +53,7 @@ export function VehicleDetectionPage({
   onRunDetection,
   onDownloadResult,
   onClearResult,
+  onOpenHistory,
   uploadSourceInputRef,
 }: VehicleDetectionPageProps) {
   const readyFiles = getReadyFiles(files)
@@ -266,7 +268,7 @@ export function VehicleDetectionPage({
           <p className="eyebrow">AI VEHICLE DETECTION</p>
           <h2>Vehicle Detection</h2>
         </div>
-        <button type="button" className="primary-btn small">Detection History</button>
+        <button type="button" className="primary-btn small" onClick={onOpenHistory}>Detection History</button>
       </section>
 
       <section className="vehicle-layout">

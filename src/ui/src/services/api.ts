@@ -39,6 +39,16 @@ export interface ReportRow {
   status: 'Completed' | 'Processing' | 'Failed';
 }
 
+export interface DetectionReport {
+  id: string;
+  date: string;
+  fileName: string;
+  type: 'Image' | 'Video' | 'Camera';
+  totalVehicles: number;
+  processingTime: number;
+  status: 'Completed' | 'Processing' | 'Failed';
+}
+
 export interface DataManagementItem {
   name: string;
   size: string;
@@ -86,6 +96,15 @@ export interface DetectionSettings {
   iou: number;
   imageSize: number;
   mode: 'Image' | 'Video' | 'Camera';
+  cameraUrl: string;
+}
+
+export interface CameraStatus {
+  running: boolean;
+  url: string;
+  frame: number;
+  detections: Detection[];
+  error: string | null;
 }
 
 export interface Detection {
@@ -134,6 +153,17 @@ export interface AppSettings {
   supportedFormats: string;
 }
 
+export interface ValidationMetrics {
+  model: string;
+  confidence: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  map50: number;
+  map50_95: number;
+  per_class: Array<{ class: string; precision: number; recall: number; f1: number }>;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
 
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -146,7 +176,14 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let detail = `Request failed: ${response.status}`;
+    try {
+      const payload = await response.json() as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      // Keep the HTTP status when the server does not return JSON.
+    }
+    throw new Error(detail);
   }
 
   return response.json() as Promise<T>;
@@ -233,6 +270,7 @@ const normalizeDetectionResponse = (
 };
 
 export const api = {
+  getValidationMetrics: () => apiRequest<ValidationMetrics>('/metrics'),
   uploadFile: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -365,9 +403,20 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getDetectionHistory: () => apiRequest<ReportRow[]>('/history'),
-  getReports: () => apiRequest<{ totalVehicles: number; imagesProcessed: number; videosProcessed: number; detectionSessions: number }[]>('/reports'),
+  getReports: () => apiRequest<DetectionReport[]>('/reports'),
   getSystemInformation: () => apiRequest<SystemInfo>('/system-info'),
   getSettings: () => apiRequest<AppSettings>('/settings'),
+  getDetectionSettings: () => apiRequest<DetectionSettings>('/settings'),
+  updateDetectionSettings: (settings: DetectionSettings) => apiRequest<DetectionSettings>('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  }),
+  startCamera: (settings: DetectionSettings) => apiRequest<{ running: boolean; url: string }>('/camera/start', {
+    method: 'POST',
+    body: JSON.stringify(settings),
+  }),
+  stopCamera: () => apiRequest<{ running: boolean }>('/camera/stop', { method: 'POST' }),
+  getCameraStatus: () => apiRequest<CameraStatus>('/camera/status'),
   updateSettings: (settings: AppSettings) => apiRequest<AppSettings>('/settings', {
     method: 'PUT',
     body: JSON.stringify(settings),

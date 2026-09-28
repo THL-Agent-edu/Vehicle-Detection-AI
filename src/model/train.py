@@ -4,6 +4,8 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
+from src.model.evaluate import evaluate_model
+
 ROOT = Path(__file__).resolve().parents[2]
 DATASET_PATH = ROOT / "data" / "data.yaml"
 MODELS_DIR = ROOT / "models"
@@ -48,7 +50,14 @@ def train_model(epochs: int = 10, imgsz: int = 640, batch: int = 8, model_name: 
     best_target = MODELS_DIR / "best.pt"
     shutil.copy2(best_source, best_target)
 
+    report = evaluate_model(
+        weights=best_target,
+        dataset=DATASET_PATH,
+        output=ROOT / "runs" / "metrics" / "f1_score.json",
+    )
+
     print(f"Training completed. Best model saved to: {best_target}")
+    print(f"Validation F1 score: {report['f1']:.4f}")
     return best_target
 
 

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import time
 import uuid
+import json
+import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import cv2
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -12,10 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
+from src.model.evaluate import DEFAULT_DATASET, DEFAULT_OUTPUT, evaluate_model
+
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_NAME = "best_v2.pt"
 MODEL_PATH = ROOT / "models" / DEFAULT_MODEL_NAME
 RUNS_DIR = ROOT / "runs" / "detect"
+REPORTS_PATH = ROOT / "runs" / "reports.json"
+SETTINGS_PATH = ROOT / "runs" / "settings.json"
 UPLOAD_DIR = ROOT / "uploads"
 MAX_UPLOAD_SIZE_MB = 500
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -32,6 +39,7 @@ class DetectionSettings(BaseModel):
     iou: float = Field(default=0.45, ge=0.05, le=1.0)
     imageSize: int = Field(default=640, ge=320, le=1280)
     mode: str = "Image"
+    cameraUrl: str = ""
 
 
 class DetectionRequest(BaseModel):
@@ -89,9 +97,60 @@ def resolve_model_path(model_name: str | None = None) -> Path:
     return Path(name)
 
 
+def read_reports() -> list[dict[str, Any]]:
+    if not REPORTS_PATH.exists():
+        return []
+    try:
+        reports = json.loads(REPORTS_PATH.read_text(encoding="utf-8"))
+        return reports if isinstance(reports, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def save_report(report: dict[str, Any]) -> None:
+    REPORTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    reports = [report, *read_reports()]
+    REPORTS_PATH.write_text(json.dumps(reports[:100], indent=2), encoding="utf-8")
+
+
+def read_detection_settings() -> DetectionSettings:
+    if SETTINGS_PATH.exists():
+        try:
+            return DetectionSettings(**json.loads(SETTINGS_PATH.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return DetectionSettings()
+
+
+def write_detection_settings(settings: DetectionSettings) -> None:
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SETTINGS_PATH.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
+
+
 model = YOLO(str(MODEL_PATH))
 app.mount("/results", StaticFiles(directory=str(ROOT / "runs")), name="results")
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
+camera_lock = threading.Lock()
+camera_state: dict[str, Any] = {
+    "running": False,
+    "url": "",
+    "frame": 0,
+    "detections": [],
+    "error": None,
+}
+camera_thread: threading.Thread | None = None
+
+
+def open_camera_capture(camera_url: str) -> cv2.VideoCapture:
+    try:
+        return cv2.VideoCapture(
+            camera_url,
+            cv2.CAP_FFMPEG,
+            [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000, cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000],
+        )
+    except (TypeError, cv2.error):
+        return cv2.VideoCapture(camera_url)
 
 
 def find_sample_image() -> Path:
@@ -195,6 +254,44 @@ def merge_model_results(results: list[Any], iou_threshold: float = 0.45) -> list
     return merged
 
 
+def run_camera_session(settings: DetectionSettings) -> None:
+    global camera_state
+    capture = open_camera_capture(settings.cameraUrl)
+    if not capture.isOpened():
+        with camera_lock:
+            camera_state.update({"running": False, "error": "Unable to open the camera URL."})
+        return
+
+    frame_number = 0
+    try:
+        while True:
+            with camera_lock:
+                if not camera_state["running"]:
+                    break
+
+            ok, frame = capture.read()
+            if not ok:
+                with camera_lock:
+                    camera_state.update({"running": False, "error": "Camera stream ended or could not be read."})
+                break
+
+            results = model(
+                frame,
+                conf=settings.confidence,
+                iou=settings.iou,
+                imgsz=settings.imageSize,
+                verbose=False,
+            )
+            detections = merge_model_results(results, iou_threshold=settings.iou)
+            frame_number += 1
+            with camera_lock:
+                camera_state.update({"frame": frame_number, "detections": detections, "error": None})
+    finally:
+        capture.release()
+        with camera_lock:
+            camera_state["running"] = False
+
+
 def infer_video_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[str, Any]:
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source}")
@@ -288,6 +385,8 @@ def infer_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[s
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source}")
 
+    start_time = time.perf_counter()
+
     if source.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv", ".webm"}:
         return infer_video_detection(source, conf, iou, imgsz)
 
@@ -354,7 +453,7 @@ def infer_detection(source: Path, conf: float, iou: float, imgsz: int) -> dict[s
         "sourceFile": source.name,
         "totalVehicles": total_vehicles,
         "averageConfidence": average_confidence,
-        "processingTime": round(time.perf_counter() * 1000) / 1000,
+        "processingTime": round(time.perf_counter() - start_time, 3),
         "detections": detections,
         "resultUrl": result_url,
     }
@@ -382,15 +481,78 @@ async def system_info() -> dict[str, str]:
 
 @app.get("/settings")
 async def settings() -> dict[str, Any]:
+    current = read_detection_settings()
     return {
-        "model": "best_v2.pt",
-        "confidenceThreshold": 0.25,
-        "iouThreshold": 0.45,
-        "inputResolution": "640",
-        "detectionMode": "Image",
+        **current.model_dump(),
+        "confidenceThreshold": current.confidence,
+        "iouThreshold": current.iou,
+        "inputResolution": str(current.imageSize),
+        "detectionMode": current.mode,
         "maxFileSize": "500 MB",
         "supportedFormats": ".jpg, .png, .mp4",
     }
+
+
+@app.put("/settings")
+async def update_settings(payload: DetectionSettings) -> dict[str, Any]:
+    write_detection_settings(payload)
+    return {
+        **payload.model_dump(),
+        "confidenceThreshold": payload.confidence,
+        "iouThreshold": payload.iou,
+        "inputResolution": str(payload.imageSize),
+        "detectionMode": payload.mode,
+        "maxFileSize": "500 MB",
+        "supportedFormats": ".jpg, .png, .mp4",
+    }
+
+
+@app.post("/camera/start")
+async def start_camera(payload: DetectionSettings) -> dict[str, Any]:
+    global camera_thread
+    camera_url = payload.cameraUrl.strip()
+    if not camera_url.startswith(("rtsp://", "http://", "https://")):
+        raise HTTPException(status_code=400, detail="Camera URL must start with rtsp://, http://, or https://.")
+    hostname = (urlparse(camera_url).hostname or "").lower()
+    if hostname in {"camera-server", "example.com", "example.org", "example.net"}:
+        raise HTTPException(status_code=400, detail="This is an example camera hostname. Enter the real camera IP address or stream domain.")
+
+    with camera_lock:
+        camera_state.update({
+            "running": False,
+            "url": camera_url,
+            "frame": 0,
+            "detections": [],
+            "error": None,
+        })
+    write_detection_settings(payload)
+    camera_thread = threading.Thread(target=run_camera_session, args=(payload,), daemon=True)
+    camera_thread.start()
+    return {"running": True, "url": camera_url}
+
+
+@app.post("/camera/stop")
+async def stop_camera() -> dict[str, Any]:
+    with camera_lock:
+        camera_state["running"] = False
+    return {"running": False}
+
+
+@app.get("/camera/status")
+async def camera_status() -> dict[str, Any]:
+    with camera_lock:
+        return dict(camera_state)
+
+
+@app.get("/metrics")
+async def metrics() -> dict[str, Any]:
+    """Return validation metrics for the active model, including F1 score."""
+    report_path = DEFAULT_OUTPUT
+    if not report_path.exists() or report_path.stat().st_mtime < MODEL_PATH.stat().st_mtime:
+        report = evaluate_model(MODEL_PATH, DEFAULT_DATASET, report_path)
+    else:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    return report
 
 
 @app.get("/files")
@@ -451,6 +613,11 @@ async def data_management() -> dict[str, Any]:
     }
 
 
+@app.get("/reports")
+async def reports() -> list[dict[str, Any]]:
+    return read_reports()
+
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)) -> dict[str, Any]:
     file_id = f"{uuid.uuid4().hex}_{file.filename}"
@@ -475,7 +642,7 @@ async def upload_file(file: UploadFile = File(...)) -> dict[str, Any]:
 async def detect(payload: DetectionRequest) -> dict[str, Any]:
     try:
         source = choose_source_path(payload.fileId, payload.file)
-        settings = payload.settings or DetectionSettings()
+        settings = payload.settings or read_detection_settings()
         mode = (payload.mode or settings.mode or "Image").strip()
         if mode.lower() not in {"image", "video", "camera"}:
             mode = "Image"
@@ -497,6 +664,15 @@ async def detect(payload: DetectionRequest) -> dict[str, Any]:
         result["processingTime"] = round(result["processingTime"], 2)
         result["averageConfidence"] = round(float(result["averageConfidence"]), 1)
         result["detections"] = result["detections"]
+        save_report({
+            "id": result["detectionId"],
+            "date": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+            "fileName": source.name,
+            "type": mode.title(),
+            "totalVehicles": result["totalVehicles"],
+            "processingTime": result["processingTime"],
+            "status": "Completed",
+        })
         return result
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
